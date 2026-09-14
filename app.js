@@ -42,7 +42,9 @@ function render(){
   $('difficulty').textContent=['Простой','Обычный','Сложный','Мастерский'][game.count-4];
   $('chest-name').textContent=titles[game.count-4];
   $('status-label').innerHTML=icon(damage>=2?'broken':damage===1?'bent':'pick');
-  $('status-label').title=damage>=2?'Отмычка сломана':damage===1?'Отмычка погнута':'Отмычка целая';
+  $('status-label').title=damage>=2?'Заменить сломанную отмычку':damage===1?'Отмычка погнута':'Отмычка целая';
+  $('status-label').disabled=!(fragile && damage>=2);
+  $('status-label').classList.toggle('broken',fragile && damage>=2);
   $('status-label').setAttribute('aria-label',$('status-label').title);
   if (renderedSeed !== game.seed) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}" tabindex="0" aria-label="Пластина ${i+1}"><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button></div>`).join('');
   renderedSeed = game.seed;
@@ -68,8 +70,8 @@ function render(){
   $('mobile-left').disabled=done || (fragile && damage>=2);
   $('mobile-right').disabled=done || (fragile && damage>=2);
   const broken=fragile && damage>=2;
-  $('mobile-action').innerHTML=icon(broken?'pick':'new')+`<span>${broken?'Заменить':'Новый замок'}</span>`;
-  $('mobile-action').setAttribute('aria-label',broken?'Заменить отмычку':'Новый замок');
+  $('mobile-action').innerHTML=icon('new')+'<span>Новый замок</span>';
+  $('mobile-action').setAttribute('aria-label','Новый замок');
   $('mobile-action').classList.toggle('ready',done || broken);
   $('result').hidden=!(done||broken);
   const word=attempts%10===1 && attempts%100!==11?'ход':attempts%10>=2 && attempts%10<=4 && (attempts%100<12 || attempts%100>14)?'хода':'ходов';
@@ -81,8 +83,6 @@ function render(){
     $(id).title=label+(value?' включён':' выключен');
   }
   setSound(sound);
-  $('pick-status').innerHTML=icon(fragile?(damage>=2?'broken':damage===1?'bent':'pick'):'shield')+`<span>${fragile?(damage>=2?'Сломана':damage===1?'Погнута':'Целая'):'Без поломки'}</span>`;
-  $('replace-pick').hidden=!broken;
   $('mode-tag').textContent=fragile?'Новичок':'Тренировка';
   $('matrix').innerHTML=reveal?`<table aria-label="Связи между пластинами"><thead><tr><th scope="col"><span class="sr-only">Двигаете / следует</span>↘</th>${game.pins.map((_,i)=>`<th scope="col">${i+1}</th>`).join('')}</tr></thead><tbody>${game.links.map((row,i)=>`<tr class="${i===selected?'active':''}"><th scope="row">${i+1}</th>${row.map((value,j)=>`<td class="${i===j?'self':value===1?'same':value===-1?'opposite':''}" aria-label="${i===j?'Сама пластина':value===1?'В ту же сторону':value===-1?'В противоположную сторону':'Нет связи'}">${i===j?'×':value===1?'+':value===-1?'−':''}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="hidden-map"><span>?</span><strong>Связи скрыты</strong></div>';
   const related=game.links[selected].flatMap((v,i)=>v?[`${i+1} (${v===1?'+':'−'})`]:[]);
@@ -120,7 +120,7 @@ $('reset').onclick=()=>{damage=0;clearBlocked();game.pins=[...game.start];histor
 $('undo').onclick=()=>{if(history.length && !solved(game.pins) && !(fragile && damage>=2)){clearBlocked();play('turn');play('slide');game.pins=history.pop();attempts++;updateStats(statsStorage,{type:'move'});render();save();}};
 $('sound').onclick=()=>{sound=!sound;setSound(sound);if(sound)play('select');render();save();};
 $('fragile').onclick=()=>{if(damage>=2){roundFinished=false;attempts=0;}fragile=!fragile;damage=0;clearBlocked();play('select');render();save();};
-$('replace-pick').onclick=()=>{damage=0;attempts=0;errors=0;roundFinished=false;game.pins=[...game.start];history=[];clearBlocked();render();play('insert');save();};
+$('status-label').onclick=()=>{if(!(fragile && damage>=2))return;damage=0;attempts=0;errors=0;roundFinished=false;game.pins=[...game.start];history=[];clearBlocked();render();play('insert');save();};
 $('show-links').onclick=()=>{reveal=!reveal;play('select');render();save();};
 document.addEventListener('keydown',e=>{
   if(e.code==='KeyR' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !document.querySelector('dialog[open]') && !e.target.closest('input,select,textarea,[contenteditable]')){e.preventDefault();if(!e.repeat)$('reset').click();return;}
@@ -166,10 +166,9 @@ document.querySelectorAll('.game-sheet').forEach(dialog=>dialog.addEventListener
  if(event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom)dialog.close();
 }));
 $('new').addEventListener('click',()=>$('mobile-menu').close());
-$('replace-pick').addEventListener('click',()=>$('mobile-menu').close());
 $('mobile-left').onclick=()=>act(selected,-1);
 $('mobile-right').onclick=()=>act(selected,1);
-$('mobile-action').onclick=()=>{if(fragile && damage>=2)$('replace-pick').click();else create();};
+$('mobile-action').onclick=()=>create();
 let gesture=null, ignoreClickUntil=0;
 $('board').addEventListener('pointerdown',event=>{
  if(!event.isPrimary || event.button!==0 || event.target.closest('button'))return;
@@ -191,7 +190,7 @@ $('board').addEventListener('click',event=>{
  if(performance.now()<ignoreClickUntil){event.preventDefault();event.stopImmediatePropagation();}
 },true);
 
-for(const [id,name,label] of [['new','new','Новый замок'],['undo','undo','Отмена'],['reset','reset','Сброс'],['replace-pick','pick','Заменить'],['open-links','links','Связи'],['open-menu','menu','Меню']]) $(id).innerHTML=icon(name)+`<span>${label}</span>`;
+for(const [id,name,label] of [['new','new','Новый замок'],['undo','undo','Отмена'],['reset','reset','Сброс'],['open-links','links','Связи'],['open-menu','menu','Меню']]) $(id).innerHTML=icon(name)+`<span>${label}</span>`;
 $('board').addEventListener('focusin',event=>{const row=event.target.closest('.plate');if(row)select(Number(row.dataset.plate));});
 document.querySelectorAll('.game-page button,.game-page .board').forEach(element=>element.addEventListener('contextmenu',event=>event.preventDefault()));
 
