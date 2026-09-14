@@ -3,7 +3,7 @@ import {play, setSound} from './sound.js?v=d0aade0092af';
 import {icon} from './icons.js?v=ce80afa38b12';
 const $=id=>document.getElementById(id);
 let game, selected=0, history=[], errors=0, reveal=true;
-let renderedSeed, attempts=0;
+let renderedSeed, attempts=0, breakFlashTimer;
 
 let sound=true, fragile=true, damage=0, blockedRows=[], shakeTimer;
 const titles=['Замок ученика','Замок торговца','Замок стражника','Замок мастера'];
@@ -79,6 +79,14 @@ function render(){
   $('selected-note').innerHTML=`<strong>Пластина ${selected+1}</strong><p>${!reveal?'':related.length?'Влияет на: '+related.join(', '):'Без связей'}</p>`;
 
 }
+function flashBreak(){
+  const overlay=$('break-flash');
+  clearTimeout(breakFlashTimer);
+  overlay.classList.remove('active');
+  void overlay.offsetWidth;
+  overlay.classList.add('active');
+  breakFlashTimer=setTimeout(()=>overlay.classList.remove('active'),1000);
+}
 function act(plate,dir){
   if(solved(game.pins) || (fragile && damage>=2))return;
   clearBlocked();attempts++;play('turn');
@@ -89,7 +97,7 @@ function act(plate,dir){
     const stuck=blockers(game.pins,game.links,plate,dir);
     errors++;if(fragile)damage++;
     render();shake(stuck);play(fragile?(damage>=2?'snap':'bend'):'impact');
-    if(fragile && damage>=2){game.pins=[...game.start];history=[];render();}
+    if(fragile && damage>=2){game.pins=[...game.start];history=[];render();flashBreak();}
   }
   else{play('slide');history.push([...game.pins]);game.pins=next;render();if(solved(next))play('remove');}
   save();
