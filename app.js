@@ -32,23 +32,30 @@ function render(){
   $('difficulty').textContent=['Простой','Обычный','Сложный','Мастерский'][game.count-4];
   $('chest-name').textContent=titles[game.count-4];
   $('status-label').textContent=done?'Открыт':'Закрыт';$('status-label').classList.toggle('won',done);
-  if (renderedSeed !== game.seed) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}"><button class="plate-number" data-select="${i}" aria-label="Выбрать пластину ${i+1}" aria-pressed="${i===selected}">${String(i+1).padStart(2,'0')}</button><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button><span class="plate-state" aria-label="${pin===3?'В центре':'Не в центре'}">${pin===3?'✓':'·'}</span></div>`).join('');
+  if (renderedSeed !== game.seed) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}" tabindex="0" aria-label="Пластина ${i+1}"><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button></div>`).join('');
   renderedSeed = game.seed;
   [...board.children].forEach((row, i) => {
     const pin = game.pins[i];
     row.classList.toggle('selected', i === selected);
     row.classList.toggle('centered', pin === 3);
-    row.querySelector('[data-select]').setAttribute('aria-pressed', String(i === selected));
+
     row.querySelectorAll('[data-dir]').forEach(button => { button.disabled = done || (fragile && damage >= 2); });
     row.querySelector('.rail').setAttribute('aria-label', `Штифт ${i+1}: позиция ${pin+1} из 7; цель 4`);
-    row.querySelector('.plate-track').style.transform = `translateX(${(3-pin)*100/7}%)`;
-    const status = row.querySelector('.plate-state');
-    status.textContent = pin === 3 ? '✓' : '·';
-    status.setAttribute('aria-label', pin === 3 ? 'В центре' : 'Не в центре');
+    const track = row.querySelector('.plate-track');
+    const target = `translateX(${(3-pin)*100/7}%)`;
+    if (Number(track.dataset.position) !== pin) {
+      track.dataset.position = pin;
+      clearTimeout(row.motionTimer);
+      row.classList.remove('moving');
+      void row.offsetWidth;
+      row.classList.add('moving');
+      track.style.transform = target;
+      row.motionTimer = setTimeout(() => row.classList.remove('moving'), 250);
+    }
   });
   $('mobile-left').disabled=done || (fragile && damage>=2);
   $('mobile-right').disabled=done || (fragile && damage>=2);
-  $('mobile-action').textContent=done?'Следующий сундук':fragile && damage>=2?'Новая отмычка':`Пластина ${selected+1} · ${fragile ? 2-damage : '∞'}`;
+  $('mobile-action').textContent=done?'Следующий сундук':fragile && damage>=2?'Новая отмычка':`Пластина ${selected+1} / ${fragile ? 2-damage : '∞'}`;
   $('mobile-action').classList.toggle('ready',done || (fragile && damage>=2));
   $('aligned').textContent=`${game.pins.filter(p=>p===3).length} / ${game.count} на месте`;
   $('moves').textContent=history.length;$('errors').textContent=errors;$('undo').disabled=!history.length || (fragile && damage >= 2);
@@ -57,7 +64,7 @@ function render(){
   $('replace-pick').hidden=!(fragile && damage>=2);
   $('mode-tag').innerHTML=fragile?'Новичок':'Тренировка';
   $('show-links').checked=reveal;
-  $('matrix').innerHTML=reveal?`<table aria-label="Связи между пластинами"><thead><tr><th scope="col"><span class="sr-only">Двигаете / следует</span>↘</th>${game.pins.map((_,i)=>`<th scope="col">${i+1}</th>`).join('')}</tr></thead><tbody>${game.links.map((row,i)=>`<tr class="${i===selected?'active':''}"><th scope="row">${i+1}</th>${row.map((value,j)=>`<td class="${i===j?'self':value===1?'same':value===-1?'opposite':''}" aria-label="${i===j?'Сама пластина':value===1?'В ту же сторону':value===-1?'В противоположную сторону':'Нет связи'}">${i===j?'×':value===1?'+':value===-1?'−':'·'}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="hidden-map"><span>?</span><strong>Связи скрыты</strong></div>';
+  $('matrix').innerHTML=reveal?`<table aria-label="Связи между пластинами"><thead><tr><th scope="col"><span class="sr-only">Двигаете / следует</span>↘</th>${game.pins.map((_,i)=>`<th scope="col">${i+1}</th>`).join('')}</tr></thead><tbody>${game.links.map((row,i)=>`<tr class="${i===selected?'active':''}"><th scope="row">${i+1}</th>${row.map((value,j)=>`<td class="${i===j?'self':value===1?'same':value===-1?'opposite':''}" aria-label="${i===j?'Сама пластина':value===1?'В ту же сторону':value===-1?'В противоположную сторону':'Нет связи'}">${i===j?'×':value===1?'+':value===-1?'−':''}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="hidden-map"><span>?</span><strong>Связи скрыты</strong></div>';
   const related=game.links[selected].flatMap((v,i)=>v?[`${i+1} (${v===1?'+':'−'})`]:[]);
   $('selected-note').innerHTML=`<strong>Пластина ${selected+1}</strong><p>${!reveal?'':related.length?'Влияет на: '+related.join(', '):'Без связей'}</p>`;
   if(done) feedback('Сундук открыт.');
@@ -72,7 +79,7 @@ function act(plate,dir){
     errors++;if(fragile)damage++;
     render();shake(stuck);play(fragile && damage>=2?'snap':'impact');
     if(fragile && damage>=2){game.pins=[...game.start];history=[];render();}
-    feedback(`Упор в край: ${stuck.length===1?'пластина':'пластины'} ${stuck.map(i=>i+1).join(', ')}. `+(fragile && damage>=2?'Отмычка сломана. Замок сброшен.':'Ход не выполнен.'),true);
+    feedback(fragile && damage>=2?'Отмычка сломана.':'Упор!'+(fragile?' Последняя попытка.':''),true);
   }
   else{play('slide');history.push([...game.pins]);game.pins=next;render();if(!solved(next))feedback(`Пластина ${plate+1} ${dir===-1?'←':'→'}`);}
   save();
@@ -108,7 +115,7 @@ try{
 }catch{create();}
 
 // Keep a single set of settings and connections across desktop and mobile.
-const mobileLayout=matchMedia('(max-width: 900px), (pointer: coarse) and (max-height: 600px)');
+const mobileLayout=matchMedia('(max-width: 1100px), (max-height: 700px)');
 const setup=document.querySelector('.setup'), connections=document.querySelector('.connections');
 const setupHome=document.createComment('settings'), linksHome=document.createComment('connections');
 setup.before(setupHome);connections.before(linksHome);
