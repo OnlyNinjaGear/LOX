@@ -1,5 +1,7 @@
 # LOX
 
+[Играть в демо](https://onlyninjagear.github.io/LOX/)
+
 Мобильный тренажёр взлома замков по мотивам Gothic Remake. Случайные решаемые замки, связанные пластины, свайпы, звуки и поломка отмычки.
 
 ## Запуск
@@ -12,7 +14,7 @@ python3 -m http.server 8080
 
 Откройте `http://localhost:8080/`. Для размещения на хостинге загрузите `index.html`, `guide.html`, `style.css`, `app.js`, `sound.js` и папку `mechanics` в одну директорию. Открывайте через HTTP(S), не через `file://`.
 
-Для GitHub Pages: **Settings → Pages → Deploy from a branch → main → / (root)**. Отдельная сборка не нужна.
+Демо автоматически обновляется через GitHub Pages при изменениях в `main`. Для своей копии: **Settings → Pages → Deploy from a branch → main → / (root)**. Отдельная сборка не нужна.
 
 ## Управление
 
