@@ -1,3 +1,5 @@
+import {createFileSounds} from './sound-files.js?v=57834a056649';
+const fileSounds=createFileSounds(new URL('./sounds/',import.meta.url));
 // Cached contact-noise foley. Inharmonic resonances stay below the friction layer.
 let context, output, enabled=true;
 const cache=new Map(), voices=new Set();
@@ -35,10 +37,12 @@ export function play(kind){
  try{
   const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
   if(!context && navigator.userActivation && !navigator.userActivation.isActive)return;
-  if(!context){context=new Audio();output=context.createGain();output.gain.value=.65;output.connect(context.destination);}
+  if(!context){context=new Audio();output=context.createGain();output.gain.value=.65;output.connect(context.destination);void fileSounds.decode(context);}
   if(context.state==='suspended')context.resume().catch(()=>{});
   if(voices.size>=8){const oldest=voices.values().next().value;oldest.stop();voices.delete(oldest);}
-  const source=context.createBufferSource();source.buffer=buffer(kind,Math.floor(Math.random()*3));source.playbackRate.value=.97+Math.random()*.06;
+  const source=context.createBufferSource(),custom=fileSounds.get(kind);
+  source.buffer=custom||buffer(kind,Math.floor(Math.random()*3));
+  source.playbackRate.value=custom?1:.97+Math.random()*.06;
   source.connect(output);voices.add(source);source.onended=()=>{source.disconnect();voices.delete(source);};
   source.start(context.currentTime+(kind==='remove'?.24:kind==='insert'?.02:0));
  }catch{/* Sound cannot block input. */}

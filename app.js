@@ -1,6 +1,6 @@
 import {readStats,updateStats} from './stats.js?v=3415224f3396';
 import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
-import {play, setSound} from './sound.js?v=d0aade0092af';
+import {play, setSound} from './sound.js?v=86f0cde10bb9';
 import {icon} from './icons.js?v=ce80afa38b12';
 const $=id=>document.getElementById(id);
 let game, selected=0, history=[], errors=0, reveal=true;
