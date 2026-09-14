@@ -1,6 +1,6 @@
-import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs';
-import {play, setSound} from './sound.js';
-import {icon} from './icons.js';
+import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
+import {play, setSound} from './sound.js?v=d0aade0092af';
+import {icon} from './icons.js?v=ce80afa38b12';
 const $=id=>document.getElementById(id);
 let game, selected=0, history=[], errors=0, reveal=true;
 let renderedSeed, attempts=0;
@@ -173,6 +173,5 @@ $('board').addEventListener('click',event=>{
 },true);
 
 for(const [id,name,label] of [['new','new','Новый замок'],['undo','undo','Отмена'],['reset','reset','Сброс'],['replace-pick','pick','Заменить'],['open-links','links','Связи'],['open-menu','menu','Меню']]) $(id).innerHTML=icon(name)+`<span>${label}</span>`;
-document.querySelectorAll('[data-count]').forEach(button=>button.insertAdjacentHTML('afterbegin',icon('lock')));
 $('board').addEventListener('focusin',event=>{const row=event.target.closest('.plate');if(row)select(Number(row.dataset.plate));});
 document.querySelectorAll('.game-page button,.game-page .board').forEach(element=>element.addEventListener('contextmenu',event=>event.preventDefault()));
