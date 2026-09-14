@@ -1,17 +1,27 @@
+import {readStats,updateStats} from './stats.js?v=3415224f3396';
 import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
 import {play, setSound} from './sound.js?v=d0aade0092af';
 import {icon} from './icons.js?v=ce80afa38b12';
 const $=id=>document.getElementById(id);
 let game, selected=0, history=[], errors=0, reveal=true;
-let renderedSeed, attempts=0, breakFlashTimer;
+let renderedSeed, attempts=0, breakFlashTimer, roundFinished=false;
+let statsStorage;try{statsStorage=window.localStorage;}catch{}
 
 let sound=true, fragile=true, damage=0, blockedRows=[], shakeTimer;
 const titles=['Замок ученика','Замок торговца','Замок стражника','Замок мастера'];
-function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts}));}catch{}}
+function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts,roundFinished}));}catch{}}
 function create(count=game?.count??4){
   const seed=crypto.getRandomValues(new Uint32Array(1))[0];
   game=generate(count,seed); delete game.proof; selected=0;history=[];errors=0;
-  damage=0;attempts=0;clearBlocked();render();play('insert');save();
+  damage=0;attempts=0;roundFinished=false;clearBlocked();render();play('insert');save();
+}
+function renderStats(){
+ const s=readStats(statsStorage);
+ $('stats-content').innerHTML=`<dl class="stats-grid"><div><dt>Победы</dt><dd>${s.wins}</dd></div><div><dt>Поражения</dt><dd>${s.losses}</dd></div><div><dt>Серия</dt><dd>${s.streak}</dd></div><div><dt>Лучшая серия</dt><dd>${s.bestStreak}</dd></div><div><dt>Всего ходов</dt><dd>${s.moves}</dd></div></dl><h3>Рекорды по ходам</h3><dl class="stats-records">${[4,5,6,7].map(n=>`<div><dt>${n} ${n===4?'пластины':'пластин'}</dt><dd>${s.records[n]??'—'}</dd></div>`).join('')}</dl>`;
+}
+function finishRound(type){
+ if(roundFinished)return;
+ roundFinished=true;updateStats(statsStorage,{type,count:game.count,moves:attempts});renderStats();
 }
 function clearBlocked(){
   clearTimeout(shakeTimer); blockedRows=[];
@@ -89,7 +99,7 @@ function flashBreak(){
 }
 function act(plate,dir){
   if(solved(game.pins) || (fragile && damage>=2))return;
-  clearBlocked();attempts++;play('turn');
+  clearBlocked();attempts++;updateStats(statsStorage,{type:'move'});play('turn');
   if(selected!==plate)play('select');
   selected=plate;
   const next=move(game.pins,game.links,plate,dir);
@@ -97,20 +107,20 @@ function act(plate,dir){
     const stuck=blockers(game.pins,game.links,plate,dir);
     errors++;if(fragile)damage++;
     render();shake(stuck);play(fragile?(damage>=2?'snap':'bend'):'impact');
-    if(fragile && damage>=2){game.pins=[...game.start];history=[];render();flashBreak();}
+    if(fragile && damage>=2){game.pins=[...game.start];history=[];render();flashBreak();finishRound('loss');}
   }
-  else{play('slide');history.push([...game.pins]);game.pins=next;render();if(solved(next))play('remove');}
+  else{play('slide');history.push([...game.pins]);game.pins=next;render();if(solved(next)){play('remove');finishRound('win');}}
   save();
 }
 function select(plate){if(selected!==plate){selected=plate;play('select');render();save();}}
 $('board').addEventListener('click',e=>{const arrow=e.target.closest('[data-dir]');if(arrow){act(+arrow.dataset.plate,+arrow.dataset.dir);return;}const row=e.target.closest('[data-plate]');if(row){select(+row.dataset.plate);}});
 $('new').onclick=()=>create();
 document.querySelectorAll('[data-count]').forEach(b=>b.onclick=()=>{if(+b.dataset.count!==game.count)create(+b.dataset.count);});
-$('reset').onclick=()=>{damage=0;clearBlocked();game.pins=[...game.start];history=[];errors=0;attempts=0;render();play('insert');save();};
-$('undo').onclick=()=>{if(history.length && !solved(game.pins) && !(fragile && damage>=2)){clearBlocked();play('turn');play('slide');game.pins=history.pop();attempts++;render();save();}};
+$('reset').onclick=()=>{damage=0;clearBlocked();game.pins=[...game.start];history=[];errors=0;attempts=0;roundFinished=false;render();play('insert');save();};
+$('undo').onclick=()=>{if(history.length && !solved(game.pins) && !(fragile && damage>=2)){clearBlocked();play('turn');play('slide');game.pins=history.pop();attempts++;updateStats(statsStorage,{type:'move'});render();save();}};
 $('sound').onclick=()=>{sound=!sound;setSound(sound);if(sound)play('select');render();save();};
-$('fragile').onclick=()=>{fragile=!fragile;damage=0;clearBlocked();play('select');render();save();};
-$('replace-pick').onclick=()=>{damage=0;attempts=0;errors=0;game.pins=[...game.start];history=[];clearBlocked();render();play('insert');save();};
+$('fragile').onclick=()=>{if(damage>=2){roundFinished=false;attempts=0;}fragile=!fragile;damage=0;clearBlocked();play('select');render();save();};
+$('replace-pick').onclick=()=>{damage=0;attempts=0;errors=0;roundFinished=false;game.pins=[...game.start];history=[];clearBlocked();render();play('insert');save();};
 $('show-links').onclick=()=>{reveal=!reveal;play('select');render();save();};
 document.addEventListener('keydown',e=>{
   if(e.code==='KeyR' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !document.querySelector('dialog[open]') && !e.target.closest('input,select,textarea,[contenteditable]')){e.preventDefault();if(!e.repeat)$('reset').click();return;}
@@ -130,6 +140,7 @@ try{
  if(saved && [4,5,6,7].includes(saved.game?.count) && saved.game.pins.length===saved.game.count && saved.game.pins.every(p=>Number.isInteger(p)&&p>=0&&p<=6) && saved.game.links.length===saved.game.count && saved.game.links.every(r=>r.length===saved.game.count&&r.every(v=>[-1,0,1].includes(v)))) {
  ({game,selected,history,errors,reveal}=saved);
  attempts=Number.isInteger(saved.attempts)?Math.max(0,saved.attempts):history.length+errors;
+ roundFinished=saved.roundFinished===true||solved(game.pins)||saved.damage>=2;
  sound=saved.sound!==false;fragile=saved.fragile===true;damage=Number.isInteger(saved.damage)?Math.max(0,Math.min(2,saved.damage)):0;render();
 
  }else create();
@@ -183,3 +194,7 @@ $('board').addEventListener('click',event=>{
 for(const [id,name,label] of [['new','new','Новый замок'],['undo','undo','Отмена'],['reset','reset','Сброс'],['replace-pick','pick','Заменить'],['open-links','links','Связи'],['open-menu','menu','Меню']]) $(id).innerHTML=icon(name)+`<span>${label}</span>`;
 $('board').addEventListener('focusin',event=>{const row=event.target.closest('.plate');if(row)select(Number(row.dataset.plate));});
 document.querySelectorAll('.game-page button,.game-page .board').forEach(element=>element.addEventListener('contextmenu',event=>event.preventDefault()));
+
+renderStats();
+$('stats-panel').addEventListener('toggle',()=>{if($('stats-panel').open)renderStats();});
+window.addEventListener('storage',renderStats);
