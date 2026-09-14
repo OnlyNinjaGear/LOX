@@ -87,6 +87,12 @@ $('fragile').onchange=e=>{fragile=e.target.checked;damage=0;clearBlocked();rende
 $('replace-pick').onclick=()=>{damage=0;game.pins=[...game.start];history=[];clearBlocked();render();play('turn');feedback('Новая отмычка.');save();};
 $('show-links').onchange=e=>{reveal=e.target.checked;render();save();};
 document.addEventListener('keydown',e=>{
+  if(e.code==='Space' || e.key===' '){
+    if(e.altKey||e.ctrlKey||e.metaKey||e.shiftKey||document.querySelector('dialog[open]')||e.target.closest('input,select,textarea,[contenteditable]:not([contenteditable="false"])'))return;
+    e.preventDefault();
+    if(!e.repeat)create();
+    return;
+  }
   if(document.querySelector('dialog[open]')||e.altKey||e.ctrlKey||e.metaKey||e.shiftKey||e.target.matches('input,select,textarea')||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
   e.preventDefault();
   if(e.key==='ArrowUp'||e.key==='ArrowDown'){selected=(selected+(e.key==='ArrowUp'?-1:1)+game.count)%game.count;render();save();}
