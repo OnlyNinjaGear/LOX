@@ -5,6 +5,7 @@ import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v
 import {play, setSound} from './sound.js?v=86f0cde10bb9';
 import {icon} from './icons.js?v=73c0fd1751a8';
 const $=id=>document.getElementById(id);
+let gesture=null,ignoreClickUntil=0;
 let recordPath='',recordMode=true,recordValid=true;
 let game, selected=0, history=[], errors=0, reveal=true;
 let renderedSeed, attempts=0, breakFlashTimer, roundFinished=false;
@@ -14,6 +15,7 @@ let sound=true, fragile=true, damage=0, blockedRows=[], shakeTimer;
 const titles=['Замок ученика','Замок торговца','Замок стражника','Замок мастера'];
 function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts,roundFinished,recordPath,recordMode,recordValid}));}catch{}}
 function create(count=game?.count??4,seed=crypto.getRandomValues(new Uint32Array(1))[0]){
+  finishDrag();
   game=generate(count,seed); delete game.proof; selected=0;history=[];errors=0;
   damage=0;attempts=0;roundFinished=false;resetRecording();clearBlocked();render();play('insert');save();
 }
@@ -104,6 +106,7 @@ function flashBreak(){
   breakFlashTimer=setTimeout(()=>overlay.classList.remove('active'),1000);
 }
 function act(plate,dir){
+  finishDrag();
   if(solved(game.pins) || (fragile && damage>=2))return;
   clearBlocked();attempts++;updateStats(statsStorage,{type:'move'});play('turn');
   if(selected!==plate)play('select');
@@ -123,7 +126,7 @@ function select(plate){if(selected!==plate){selected=plate;play('select');render
 $('board').addEventListener('click',e=>{const arrow=e.target.closest('[data-dir]');if(arrow){act(+arrow.dataset.plate,+arrow.dataset.dir);return;}const row=e.target.closest('[data-plate]');if(row){select(+row.dataset.plate);}});
 $('new').onclick=()=>create();
 document.querySelectorAll('[data-count]').forEach(b=>b.onclick=()=>{if(+b.dataset.count!==game.count)create(+b.dataset.count);});
-$('reset').onclick=()=>{damage=0;clearBlocked();game.pins=[...game.start];history=[];errors=0;attempts=0;roundFinished=false;resetRecording();render();play('insert');save();};
+$('reset').onclick=()=>{finishDrag();damage=0;clearBlocked();game.pins=[...game.start];history=[];errors=0;attempts=0;roundFinished=false;resetRecording();render();play('insert');save();};
 $('undo').onclick=()=>{if(history.length && !solved(game.pins) && !(fragile && damage>=2)){clearBlocked();play('turn');play('slide');record('u');game.pins=history.pop();attempts++;updateStats(statsStorage,{type:'move'});render();save();}};
 $('sound').onclick=()=>{sound=!sound;setSound(sound);if(sound)play('select');render();save();};
 $('fragile').onclick=()=>{const restart=damage>=2;if(restart){roundFinished=false;attempts=0;}fragile=!fragile;damage=0;if(restart)resetRecording();else if(!solved(game.pins))record(fragile?'g':'f');clearBlocked();play('select');render();save();};
@@ -179,23 +182,56 @@ $('new').addEventListener('click',()=>$('mobile-menu').close());
 $('mobile-left').onclick=()=>act(selected,-1);
 $('mobile-right').onclick=()=>act(selected,1);
 $('mobile-action').onclick=()=>create();
-let gesture=null, ignoreClickUntil=0;
+function finishDrag(){
+ if(!gesture)return;
+ const current=gesture;gesture=null;
+ for(const row of $('board').children){
+  row.classList.remove('dragging');row.classList.add('drag-settle');
+  const track=row.querySelector('.plate-track');
+  // Flush the finger position before transitioning back or committing the move.
+  void row.offsetWidth;
+  const target=`translateX(${(3-game.pins[Number(row.dataset.plate)])*100/7}%)`;
+  track.style.transform=target;row.querySelector('.plate-bed').style.transform=target;
+  clearTimeout(row.settleTimer);row.settleTimer=setTimeout(()=>row.classList.remove('drag-settle'),250);
+ }
+ return current;
+}
 $('board').addEventListener('pointerdown',event=>{
- if(!event.isPrimary || event.button!==0 || event.target.closest('button'))return;
+ if(gesture||!event.isPrimary||event.button!==0||event.target.closest('button')||solved(game.pins)||(fragile&&damage>=2))return;
  const row=event.target.closest('.plate');if(!row)return;
- gesture={id:event.pointerId,x:event.clientX,y:event.clientY,plate:Number(row.dataset.plate)};
+ const plate=Number(row.dataset.plate);select(plate);clearBlocked();
+ gesture={id:event.pointerId,x:event.clientX,y:event.clientY,plate,step:row.querySelector('.rail').getBoundingClientRect().width/13,amount:0,dragged:false};
  row.setPointerCapture(event.pointerId);
 });
+$('board').addEventListener('pointermove',event=>{
+ if(!gesture||event.pointerId!==gesture.id)return;
+ const dx=event.clientX-gesture.x,dy=event.clientY-gesture.y;
+ if(!gesture.dragged){if(Math.abs(dx)<5||Math.abs(dx)<Math.abs(dy)*1.2)return;gesture.dragged=true;}
+ event.preventDefault();
+ const dir=dx<0?-1:1,allowed=!!move(game.pins,game.links,gesture.plate,dir);
+ gesture.amount=Math.max(-1,Math.min(1,dx/Math.max(1,gesture.step)));
+ const amount=allowed?gesture.amount:Math.sign(dx)*Math.min(.13,Math.abs(gesture.amount)*.2);
+ [...$('board').children].forEach((row,i)=>{
+  const factor=i===gesture.plate?1:game.links[gesture.plate][i];if(!factor)return;
+  clearTimeout(row.motionTimer);clearTimeout(row.settleTimer);
+  row.classList.remove('moving','drag-settle');row.classList.add('dragging');
+  const target=`translateX(${(3-game.pins[i]+amount*factor)*100/7}%)`;
+  row.querySelector('.plate-track').style.transform=target;
+  row.querySelector('.plate-bed').style.transform=target;
+ });
+});
 $('board').addEventListener('pointerup',event=>{
- if(!gesture || gesture.id!==event.pointerId)return;
- const {x,y,plate}=gesture;gesture=null;
- const dx=event.clientX-x,dy=event.clientY-y;
- if(Math.abs(dx)>=24 && Math.abs(dx)>Math.abs(dy)*1.3){
-   ignoreClickUntil=performance.now()+350;act(plate,dx<0?-1:1);
+ if(!gesture||gesture.id!==event.pointerId)return;
+ const current=finishDrag();
+ if(current.dragged){
+  ignoreClickUntil=performance.now()+350;
+  if(Math.abs(current.amount)>=.35)act(current.plate,current.amount<0?-1:1);
  }
 });
-$('board').addEventListener('pointercancel',()=>{gesture=null;});
-$('board').addEventListener('lostpointercapture',()=>{gesture=null;});
+$('board').addEventListener('pointercancel',finishDrag);
+$('board').addEventListener('lostpointercapture',finishDrag);
+window.addEventListener('blur',finishDrag);
+window.addEventListener('resize',finishDrag);
 $('board').addEventListener('click',event=>{
  if(performance.now()<ignoreClickUntil){event.preventDefault();event.stopImmediatePropagation();}
 },true);

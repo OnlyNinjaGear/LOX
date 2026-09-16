@@ -73,3 +73,5 @@ button>span{display:block;line-height:20px}.toggle{display:flex;align-items:cent
 @supports (transition-timing-function:linear(0,1)){:root{--plate-travel:linear(0,.05 12%,.18 38%,.82 62%,.95 88%,1)}}
 .plate-bed{position:absolute;z-index:0;top:50%;left:calc(100% * 3 / 13);width:calc(100% * 7 / 13);height:78%;max-height:46px;translate:0 -50%;border-radius:4px;background:#080b07;pointer-events:none;transition:transform 200ms var(--plate-travel,cubic-bezier(.4,0,.6,1)) 25ms}
 .fixed-pin{opacity:1;transition:none}.moving .fixed-pin{opacity:1}
+
+.plate.dragging .plate-track,.plate.dragging .plate-bed{transition:none}.plate.dragging .fixed-pin{animation:none;transform:translate(-50%,-50%) scale(.84)}.plate.drag-settle .plate-track,.plate.drag-settle .plate-bed{transition:transform 160ms cubic-bezier(.2,.7,.3,1) 0ms}
