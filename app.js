@@ -1,5 +1,5 @@
 import {lockToken,parseLock,moveCode,replayToken,parseReplay,replayFrames,MAX_REPLAY_STEPS} from './replay.js?v=71c1d75dc698';
-import {createReplayViewer} from './replay-view.js?v=3ddbe271a382';
+import {createReplayViewer} from './replay-view.js?v=48db20979776';
 import {readStats,updateStats} from './stats.js?v=3415224f3396';
 import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
 import {play, setSound} from './sound.js?v=86f0cde10bb9';
@@ -51,7 +51,7 @@ function render(){
   $('status-label').disabled=!(fragile && damage>=2);
   $('status-label').classList.toggle('broken',fragile && damage>=2);
   $('status-label').setAttribute('aria-label',$('status-label').title);
-  if (renderedSeed !== `${game.count}:${game.seed}`) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}" tabindex="0" aria-label="Пластина ${i+1}"><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button></div>`).join('');
+  if (renderedSeed !== `${game.count}:${game.seed}`) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}" tabindex="0" aria-label="Пластина ${i+1}"><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><div class="plate-bed" style="transform:translateX(${(3-pin)*100/7}%)" aria-hidden="true"></div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button></div>`).join('');
   renderedSeed = `${game.count}:${game.seed}`;
   [...board.children].forEach((row, i) => {
     const pin = game.pins[i];
@@ -69,6 +69,7 @@ function render(){
       void row.offsetWidth;
       row.classList.add('moving');
       track.style.transform = target;
+      row.querySelector('.plate-bed').style.transform = target;
       row.motionTimer = setTimeout(() => row.classList.remove('moving'), 250);
     }
   });

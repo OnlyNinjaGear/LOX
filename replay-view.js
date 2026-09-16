@@ -25,6 +25,7 @@ export function createReplayViewer(){
     clearTimeout(row.motionTimer);row.classList.remove('moving');void row.offsetWidth;
     if(animate)row.classList.add('moving');
     track.style.transform=`translateX(${(3-pin)*100/7}%)`;track.dataset.position=pin;
+    row.querySelector('.plate-bed').style.transform=track.style.transform;
     row.motionTimer=setTimeout(()=>row.classList.remove('moving'),250);
    }
    if(animate&&frame.blocked.includes(i)){void row.offsetWidth;row.classList.add('blocked');}
@@ -56,7 +57,7 @@ export function createReplayViewer(){
  return {
   open(data){
    clear();replay=data;index=0;speed=1;playing=true;
-   board.innerHTML=data.game.start.map((pin,i)=>`<div class="plate ${pin===3?'centered':''}" role="img" aria-label="Пластина ${i+1}"><div class="rail"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div></div>`).join('');
+   board.innerHTML=data.game.start.map((pin,i)=>`<div class="plate ${pin===3?'centered':''}" role="img" aria-label="Пластина ${i+1}"><div class="rail"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><div class="plate-bed" style="transform:translateX(${(3-pin)*100/7}%)" aria-hidden="true"></div><span class="fixed-pin" aria-hidden="true"></span></div></div>`).join('');
    draw(false);dialog.showModal();schedule();
   }
  };
