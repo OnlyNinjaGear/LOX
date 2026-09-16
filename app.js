@@ -1,20 +1,24 @@
+import {lockToken,parseLock,moveCode,replayToken,parseReplay,replayFrames,MAX_REPLAY_STEPS} from './replay.js?v=71c1d75dc698';
+import {createReplayViewer} from './replay-view.js?v=3ddbe271a382';
 import {readStats,updateStats} from './stats.js?v=3415224f3396';
 import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
 import {play, setSound} from './sound.js?v=86f0cde10bb9';
-import {icon} from './icons.js?v=ce80afa38b12';
+import {icon} from './icons.js?v=73c0fd1751a8';
 const $=id=>document.getElementById(id);
+let recordPath='',recordMode=true,recordValid=true;
 let game, selected=0, history=[], errors=0, reveal=true;
 let renderedSeed, attempts=0, breakFlashTimer, roundFinished=false;
 let statsStorage;try{statsStorage=window.localStorage;}catch{}
 
 let sound=true, fragile=true, damage=0, blockedRows=[], shakeTimer;
 const titles=['Замок ученика','Замок торговца','Замок стражника','Замок мастера'];
-function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts,roundFinished}));}catch{}}
-function create(count=game?.count??4){
-  const seed=crypto.getRandomValues(new Uint32Array(1))[0];
+function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts,roundFinished,recordPath,recordMode,recordValid}));}catch{}}
+function create(count=game?.count??4,seed=crypto.getRandomValues(new Uint32Array(1))[0]){
   game=generate(count,seed); delete game.proof; selected=0;history=[];errors=0;
-  damage=0;attempts=0;roundFinished=false;clearBlocked();render();play('insert');save();
+  damage=0;attempts=0;roundFinished=false;resetRecording();clearBlocked();render();play('insert');save();
 }
+function resetRecording(){recordPath='';recordMode=fragile;recordValid=true;}
+function record(code){if(recordPath.length>=MAX_REPLAY_STEPS){recordValid=false;return;}recordPath+=code;}
 function renderStats(){
  const s=readStats(statsStorage);
  $('stats-content').innerHTML=`<dl class="stats-grid"><div><dt>Победы</dt><dd>${s.wins}</dd></div><div><dt>Поражения</dt><dd>${s.losses}</dd></div><div><dt>Серия</dt><dd>${s.streak}</dd></div><div><dt>Лучшая серия</dt><dd>${s.bestStreak}</dd></div><div><dt>Всего ходов</dt><dd>${s.moves}</dd></div></dl><h3>Рекорды по ходам</h3><dl class="stats-records">${[4,5,6,7].map(n=>`<div><dt>${n} ${n===4?'пластины':'пластин'}</dt><dd>${s.records[n]??'—'}</dd></div>`).join('')}</dl>`;
@@ -38,6 +42,7 @@ function shake(indices){
 function render(){
   const board = $('board');
   const done=solved(game.pins);
+  $('share-replay').hidden=!(done&&recordValid&&recordPath.length);
   document.querySelectorAll('[data-count]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.count===game.count)));
   $('difficulty').textContent=['Простой','Обычный','Сложный','Мастерский'][game.count-4];
   $('chest-name').textContent=titles[game.count-4];
@@ -46,8 +51,8 @@ function render(){
   $('status-label').disabled=!(fragile && damage>=2);
   $('status-label').classList.toggle('broken',fragile && damage>=2);
   $('status-label').setAttribute('aria-label',$('status-label').title);
-  if (renderedSeed !== game.seed) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}" tabindex="0" aria-label="Пластина ${i+1}"><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button></div>`).join('');
-  renderedSeed = game.seed;
+  if (renderedSeed !== `${game.count}:${game.seed}`) board.innerHTML=game.pins.map((pin,i)=>`<div class="plate ${i===selected?'selected':''} ${pin===3?'centered':''}" data-plate="${i}" tabindex="0" aria-label="Пластина ${i+1}"><button class="arrow" data-plate="${i}" data-dir="-1" aria-label="Пластина ${i+1}: влево" ${done?'disabled':''}>‹</button><div class="rail" role="img" aria-label="Пластина ${i+1}: отверстие ${pin+1}"><div class="plate-track" data-position="${pin}" style="transform:translateX(${(3-pin)*100/7}%)">${Array.from({length:7},(_,j)=>`<span class="hole ${j===3?'target':''}"></span>`).join('')}</div><span class="fixed-pin" aria-hidden="true"></span></div><button class="arrow" data-plate="${i}" data-dir="1" aria-label="Пластина ${i+1}: вправо" ${done?'disabled':''}>›</button></div>`).join('');
+  renderedSeed = `${game.count}:${game.seed}`;
   [...board.children].forEach((row, i) => {
     const pin = game.pins[i];
     row.classList.toggle('selected', i === selected);
@@ -102,6 +107,7 @@ function act(plate,dir){
   clearBlocked();attempts++;updateStats(statsStorage,{type:'move'});play('turn');
   if(selected!==plate)play('select');
   selected=plate;
+  record(moveCode(plate,dir));
   const next=move(game.pins,game.links,plate,dir);
   if(!next){
     const stuck=blockers(game.pins,game.links,plate,dir);
@@ -116,11 +122,11 @@ function select(plate){if(selected!==plate){selected=plate;play('select');render
 $('board').addEventListener('click',e=>{const arrow=e.target.closest('[data-dir]');if(arrow){act(+arrow.dataset.plate,+arrow.dataset.dir);return;}const row=e.target.closest('[data-plate]');if(row){select(+row.dataset.plate);}});
 $('new').onclick=()=>create();
 document.querySelectorAll('[data-count]').forEach(b=>b.onclick=()=>{if(+b.dataset.count!==game.count)create(+b.dataset.count);});
-$('reset').onclick=()=>{damage=0;clearBlocked();game.pins=[...game.start];history=[];errors=0;attempts=0;roundFinished=false;render();play('insert');save();};
-$('undo').onclick=()=>{if(history.length && !solved(game.pins) && !(fragile && damage>=2)){clearBlocked();play('turn');play('slide');game.pins=history.pop();attempts++;updateStats(statsStorage,{type:'move'});render();save();}};
+$('reset').onclick=()=>{damage=0;clearBlocked();game.pins=[...game.start];history=[];errors=0;attempts=0;roundFinished=false;resetRecording();render();play('insert');save();};
+$('undo').onclick=()=>{if(history.length && !solved(game.pins) && !(fragile && damage>=2)){clearBlocked();play('turn');play('slide');record('u');game.pins=history.pop();attempts++;updateStats(statsStorage,{type:'move'});render();save();}};
 $('sound').onclick=()=>{sound=!sound;setSound(sound);if(sound)play('select');render();save();};
-$('fragile').onclick=()=>{if(damage>=2){roundFinished=false;attempts=0;}fragile=!fragile;damage=0;clearBlocked();play('select');render();save();};
-$('status-label').onclick=()=>{if(!(fragile && damage>=2))return;damage=0;attempts=0;errors=0;roundFinished=false;game.pins=[...game.start];history=[];clearBlocked();render();play('insert');save();};
+$('fragile').onclick=()=>{const restart=damage>=2;if(restart){roundFinished=false;attempts=0;}fragile=!fragile;damage=0;if(restart)resetRecording();else if(!solved(game.pins))record(fragile?'g':'f');clearBlocked();play('select');render();save();};
+$('status-label').onclick=()=>{if(!(fragile && damage>=2))return;damage=0;attempts=0;errors=0;roundFinished=false;game.pins=[...game.start];history=[];resetRecording();clearBlocked();render();play('insert');save();};
 $('show-links').onclick=()=>{reveal=!reveal;play('select');render();save();};
 document.addEventListener('keydown',e=>{
   if(e.code==='KeyR' && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !document.querySelector('dialog[open]') && !e.target.closest('input,select,textarea,[contenteditable]')){e.preventDefault();if(!e.repeat)$('reset').click();return;}
@@ -141,6 +147,9 @@ try{
  ({game,selected,history,errors,reveal}=saved);
  attempts=Number.isInteger(saved.attempts)?Math.max(0,saved.attempts):history.length+errors;
  roundFinished=saved.roundFinished===true||solved(game.pins)||saved.damage>=2;
+ recordMode=typeof saved.recordMode==='boolean'?saved.recordMode:true;
+ recordPath=typeof saved.recordPath==='string'?saved.recordPath:'';recordValid=saved.recordValid===true;
+ if(recordValid){try{const last=replayFrames(lockToken(game.count,game.seed,recordMode),recordPath,false).frames.at(-1);recordValid=last.pins.every((p,i)=>p===game.pins[i])&&last.damage===saved.damage&&last.fragile===saved.fragile;}catch{recordValid=false;}}
  sound=saved.sound!==false;fragile=saved.fragile===true;damage=Number.isInteger(saved.damage)?Math.max(0,Math.min(2,saved.damage)):0;render();
 
  }else create();
@@ -152,7 +161,7 @@ const setup=document.querySelector('.setup'), connections=document.querySelector
 const setupHome=document.createComment('settings'), linksHome=document.createComment('connections');
 setup.before(setupHome);connections.before(linksHome);
 function arrangeMobile(){
-  document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());
+  document.querySelectorAll('.game-sheet[open]').forEach(dialog=>dialog.close());
   if(mobileLayout.matches){$('menu-content').append(setup);$('links-content').append(connections);}
   else{setupHome.after(setup);linksHome.after(connections);}
 }
@@ -197,3 +206,43 @@ document.querySelectorAll('.game-page button,.game-page .board').forEach(element
 renderStats();
 $('stats-panel').addEventListener('toggle',()=>{if($('stats-panel').open)renderStats();});
 window.addEventListener('storage',renderStats);
+
+const replayViewer=createReplayViewer();
+$('share-lock').innerHTML=icon('share')+'<span>Поделиться замком</span>';
+$('share-replay').innerHTML=icon('play')+'<span>Поделиться реплеем</span>';
+$('copy-link').innerHTML=icon('share')+'<span>Копировать</span>';
+function showShare(replay=false){
+ const url=new URL(location.hostname==='gothic-chest-practice.partplacecorp.chatgpt.site'?'https://onlyninjagear.github.io/LOX/':location.href);url.search='';
+ try{
+  const token=lockToken(game.count,game.seed,replay?recordMode:fragile);
+  url.hash=replay?'replay='+replayToken(token,recordPath):'lock='+token;
+ }catch{$('share-note').textContent='Не удалось собрать реплей.';return;}
+ document.querySelectorAll('.game-sheet[open]').forEach(d=>d.close());
+ $('share-title').textContent=replay?'Поделиться реплеем':'Поделиться замком';
+ $('share-note').textContent=replay?'Прохождение до победы':`Сид: ${game.seed}`;
+ $('share-url').value=url.href;$('copy-status').textContent='';$('share-dialog').showModal();
+}
+$('share-lock').onclick=()=>showShare();
+$('share-replay').onclick=()=>{if(solved(game.pins)&&recordValid)showShare(true);};
+$('share-close').onclick=()=>$('share-dialog').close();
+$('copy-link').onclick=async()=>{
+ try{await navigator.clipboard.writeText($('share-url').value);$('copy-status').textContent='Скопировано';}
+ catch{$('share-url').focus();$('share-url').select();$('copy-status').textContent='Скопируйте выделенную ссылку';}
+};
+function loadSharedLink(){
+ if(!location.hash)return;
+ const params=new URLSearchParams(location.hash.slice(1));
+ try{
+  if(params.has('replay')){
+   const replay=parseReplay(params.get('replay'));
+   document.querySelectorAll('dialog[open]').forEach(d=>d.close());replayViewer.open(replay);
+  }else if(params.has('lock')){
+   const spec=parseLock(params.get('lock'));fragile=spec.fragile;create(spec.count,spec.seed);
+   window.history.replaceState(null,'',location.pathname+location.search);
+  }
+ }catch{
+  $('share-title').textContent='Ссылка не открылась';$('share-note').textContent='Замок или реплей повреждён.';
+  $('share-url').value=location.href;$('copy-status').textContent='';$('share-dialog').showModal();
+ }
+}
+window.addEventListener('hashchange',loadSharedLink);loadSharedLink();
