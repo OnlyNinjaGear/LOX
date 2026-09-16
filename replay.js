@@ -1,3 +1,4 @@
+import {seedNumber,encodeSeed,decodeSeed} from './seed.js?v=9e96a8c1cbcb';
 import {generate,move,solved,blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
 const moves='0123456789abcd';
 export const MAX_REPLAY_STEPS=20000;
@@ -6,7 +7,16 @@ export function lockToken(count,seed,fragile=true){
  if(![4,5,6,7].includes(count)||!Number.isInteger(seed)||seed<0||seed>0xffffffff)throw new Error('Неверный замок');
  return `1.${count}.${seed.toString(36)}.${fragile?1:0}`;
 }
+export function textLockToken(count,text,fragile=true){
+ lockToken(count,seedNumber(text),fragile);
+ return `2.${count}.${encodeSeed(text)}.${fragile?1:0}`;
+}
 export function parseLock(token){
+ if(typeof token==='string'&&/^2\.[4-7]\.[0-9a-f]+\.[01]$/.test(token)){
+  const [,n,s,f]=token.split('.'),seedText=decodeSeed(s);
+  return {count:Number(n),seed:seedNumber(seedText),fragile:f==='1',seedText};
+ }
+
  if(typeof token!=='string'||!/^1\.[4-7]\.[0-9a-z]{1,7}\.[01]$/.test(token))throw new Error('Неверная ссылка');
  const [,n,s,f]=token.split('.'),count=Number(n),seed=parseInt(s,36),fragile=f==='1';
  lockToken(count,seed,fragile);
@@ -40,7 +50,7 @@ export function replayFrames(token,path,requireWin=true){
 }
 export function replayToken(token,path){replayFrames(token,path);return token+'.'+path;}
 export function parseReplay(value){
- if(typeof value!=='string'||value.length>MAX_REPLAY_STEPS+32)throw new Error('Слишком длинный реплей');
+ if(typeof value!=='string'||value.length>MAX_REPLAY_STEPS+2100)throw new Error('Слишком длинный реплей');
  const parts=value.split('.');if(parts.length!==5)throw new Error('Неверная ссылка');
  return replayFrames(parts.slice(0,4).join('.'),parts[4]);
 }

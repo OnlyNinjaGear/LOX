@@ -75,3 +75,5 @@ button>span{display:block;line-height:20px}.toggle{display:flex;align-items:cent
 .fixed-pin{opacity:1;transition:none}.moving .fixed-pin{opacity:1}
 
 .plate.dragging .plate-track,.plate.dragging .plate-bed{transition:none}.plate.dragging .fixed-pin{animation:none;transform:translate(-50%,-50%) scale(.84)}.plate.drag-settle .plate-track,.plate.drag-settle .plate-bed{transition:transform 160ms cubic-bezier(.2,.7,.3,1) 0ms}
+
+.seed-panel{margin-top:10px}.seed-panel summary{padding:10px 0;cursor:pointer;color:var(--gold);font-size:14px}.seed-panel input{width:100%;min-width:0;height:44px;padding:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:14px Arial,sans-serif;user-select:text;-webkit-user-select:text}.seed-panel button{width:100%;margin-top:8px}#seed-error:empty{display:none}

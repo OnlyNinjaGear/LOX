@@ -1,4 +1,5 @@
-import {lockToken,parseLock,moveCode,replayToken,parseReplay,replayFrames,MAX_REPLAY_STEPS} from './replay.js?v=71c1d75dc698';
+import {normalizeSeed,seedNumber} from './seed.js?v=9e96a8c1cbcb';
+import {textLockToken,lockToken,parseLock,moveCode,replayToken,parseReplay,replayFrames,MAX_REPLAY_STEPS} from './replay.js?v=f5bae173291e';
 import {createReplayViewer} from './replay-view.js?v=48db20979776';
 import {readStats,updateStats} from './stats.js?v=3415224f3396';
 import {generate, move, solved, blockers} from './mechanics/lock-mechanics.mjs?v=7cb0dc9bef19';
@@ -6,6 +7,7 @@ import {play, setSound} from './sound.js?v=86f0cde10bb9';
 import {icon} from './icons.js?v=73c0fd1751a8';
 const $=id=>document.getElementById(id);
 let gesture=null,ignoreClickUntil=0;
+let seedText='';
 let recordPath='',recordMode=true,recordValid=true;
 let game, selected=0, history=[], errors=0, reveal=true;
 let renderedSeed, attempts=0, breakFlashTimer, roundFinished=false;
@@ -13,12 +15,14 @@ let statsStorage;try{statsStorage=window.localStorage;}catch{}
 
 let sound=true, fragile=true, damage=0, blockedRows=[], shakeTimer;
 const titles=['Замок ученика','Замок торговца','Замок стражника','Замок мастера'];
-function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts,roundFinished,recordPath,recordMode,recordValid}));}catch{}}
-function create(count=game?.count??4,seed=crypto.getRandomValues(new Uint32Array(1))[0]){
+function save(){try{sessionStorage.setItem('gothic-practice',JSON.stringify({game,selected,history,errors,reveal,sound,fragile,damage,attempts,roundFinished,recordPath,recordMode,recordValid,seedText}));}catch{}}
+function create(count=game?.count??4,seed=crypto.getRandomValues(new Uint32Array(1))[0],text=String(seed)){
   finishDrag();
+  seedText=text;$('seed-input').value=seedText;$('seed-error').textContent='';
   game=generate(count,seed); delete game.proof; selected=0;history=[];errors=0;
   damage=0;attempts=0;roundFinished=false;resetRecording();clearBlocked();render();play('insert');save();
 }
+function currentToken(mode){return seedText?textLockToken(game.count,seedText,mode):lockToken(game.count,game.seed,mode);}
 function resetRecording(){recordPath='';recordMode=fragile;recordValid=true;}
 function record(code){if(recordPath.length>=MAX_REPLAY_STEPS){recordValid=false;return;}recordPath+=code;}
 function renderStats(){
@@ -151,9 +155,12 @@ try{
  ({game,selected,history,errors,reveal}=saved);
  attempts=Number.isInteger(saved.attempts)?Math.max(0,saved.attempts):history.length+errors;
  roundFinished=saved.roundFinished===true||solved(game.pins)||saved.damage>=2;
+ seedText=typeof saved.seedText==='string'&&saved.seedText.length<=128?saved.seedText:String(game.seed);
+ if(seedNumber(seedText)!==game.seed)seedText=String(game.seed);
+ $('seed-input').value=seedText;
  recordMode=typeof saved.recordMode==='boolean'?saved.recordMode:true;
  recordPath=typeof saved.recordPath==='string'?saved.recordPath:'';recordValid=saved.recordValid===true;
- if(recordValid){try{const last=replayFrames(lockToken(game.count,game.seed,recordMode),recordPath,false).frames.at(-1);recordValid=last.pins.every((p,i)=>p===game.pins[i])&&last.damage===saved.damage&&last.fragile===saved.fragile;}catch{recordValid=false;}}
+ if(recordValid){try{const last=replayFrames(currentToken(recordMode),recordPath,false).frames.at(-1);recordValid=last.pins.every((p,i)=>p===game.pins[i])&&last.damage===saved.damage&&last.fragile===saved.fragile;}catch{recordValid=false;}}
  sound=saved.sound!==false;fragile=saved.fragile===true;damage=Number.isInteger(saved.damage)?Math.max(0,Math.min(2,saved.damage)):0;render();
 
  }else create();
@@ -251,12 +258,12 @@ $('copy-link').innerHTML=icon('share')+'<span>Копировать</span>';
 function showShare(replay=false){
  const url=new URL(location.hostname==='gothic-chest-practice.partplacecorp.chatgpt.site'?'https://onlyninjagear.github.io/LOX/':location.href);url.search='';
  try{
-  const token=lockToken(game.count,game.seed,replay?recordMode:fragile);
+  const token=currentToken(replay?recordMode:fragile);
   url.hash=replay?'replay='+replayToken(token,recordPath):'lock='+token;
  }catch{$('share-note').textContent='Не удалось собрать реплей.';return;}
  document.querySelectorAll('.game-sheet[open]').forEach(d=>d.close());
  $('share-title').textContent=replay?'Поделиться реплеем':'Поделиться замком';
- $('share-note').textContent=replay?'Прохождение до победы':`Сид: ${game.seed}`;
+ $('share-note').textContent=replay?'Прохождение до победы':`Сид: ${seedText||game.seed}`;
  $('share-url').value=url.href;$('copy-status').textContent='';$('share-dialog').showModal();
 }
 $('share-lock').onclick=()=>showShare();
@@ -274,7 +281,7 @@ function loadSharedLink(){
    const replay=parseReplay(params.get('replay'));
    document.querySelectorAll('dialog[open]').forEach(d=>d.close());replayViewer.open(replay);
   }else if(params.has('lock')){
-   const spec=parseLock(params.get('lock'));fragile=spec.fragile;create(spec.count,spec.seed);
+   const spec=parseLock(params.get('lock'));fragile=spec.fragile;create(spec.count,spec.seed,spec.seedText??String(spec.seed));
    window.history.replaceState(null,'',location.pathname+location.search);
   }
  }catch{
@@ -283,3 +290,13 @@ function loadSharedLink(){
  }
 }
 window.addEventListener('hashchange',loadSharedLink);loadSharedLink();
+
+$('seed-form').addEventListener('submit',event=>{
+ event.preventDefault();
+ try{
+  const text=normalizeSeed($('seed-input').value);
+  if(text)create(game.count,seedNumber(text),text);else create();
+  $('mobile-menu').close();
+ }catch(error){$('seed-error').textContent=error.message;}
+});
+$('open-seed').innerHTML=icon('lock')+'<span>Открыть</span>';
